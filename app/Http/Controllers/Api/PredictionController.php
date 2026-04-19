@@ -1,5 +1,7 @@
 <?php
+
 namespace App\Http\Controllers\Api;
+
 use App\Http\Controllers\Controller;
 use Illuminate\Http\Request;
 use App\Models\Prediction;
@@ -13,7 +15,10 @@ class PredictionController extends Controller
     const FREE_LIMIT = 5;
     const TOKEN_COST = 1.0;
     private $aiService;
-    public function __construct(AIService $aiService) { $this->aiService = $aiService; }
+    public function __construct(AIService $aiService)
+    {
+        $this->aiService = $aiService;
+    }
 
     public function predict(Request $request): JsonResponse
     {
@@ -50,8 +55,8 @@ class PredictionController extends Controller
         $debateResult = $this->aiService->runMultiAgentDebate($image);
 
         if (isset($debateResult['error'])) {
-            $prediction->update(['final_prediction'=>'Loi he thong AI','era'=>'Vui long thu lai','result_json'=>['error'=>$debateResult['error']]]);
-            return response()->json(['status'=>'error','message'=>'AI Server Error: '.$debateResult['error'],'db_id'=>$prediction->id], 502);
+            $prediction->update(['final_prediction' => 'Loi he thong AI', 'era' => 'Vui long thu lai', 'result_json' => ['error' => $debateResult['error']]]);
+            return response()->json(['status' => 'error', 'message' => 'AI Server Error: ' . $debateResult['error'], 'db_id' => $prediction->id], 502);
         }
 
         $final = $debateResult['final_report'] ?? [];
@@ -67,11 +72,11 @@ class PredictionController extends Controller
             if ((int)$user->free_predictions_used < self::FREE_LIMIT) {
                 $user->increment('free_predictions_used');
                 $remaining = self::FREE_LIMIT - $user->fresh()->free_predictions_used;
-                $note = 'Luot mien phi con lai: '.$remaining;
+                $note = 'Luot mien phi con lai: ' . $remaining;
             } else {
                 $user->decrement('token_balance', self::TOKEN_COST);
-                TokenHistory::create(['user_id'=>$user->id,'type'=>'out','amount'=>self::TOKEN_COST,'description'=>'Phan tich gom: '.($final['final_prediction'] ?? 'Unknown')]);
-                $note = 'Da tru 1 luot. Con lai: '.(float)$user->fresh()->token_balance;
+                TokenHistory::create(['user_id' => $user->id, 'type' => 'out', 'amount' => self::TOKEN_COST, 'description' => 'Phan tich gom: ' . ($final['final_prediction'] ?? 'Unknown')]);
+                $note = 'Da tru 1 luot. Con lai: ' . (float)$user->fresh()->token_balance;
             }
         }
 
@@ -88,17 +93,19 @@ class PredictionController extends Controller
         ]);
     }
 
-    public function chat(Request $request): JsonResponse {
+    public function chat(Request $request): JsonResponse
+    {
         $user = auth('sanctum')->user();
         $query = $request->input('question', '');
-        
+        $pythonAiUrl = rtrim((string) env('PYTHON_AI_URL', 'http://127.0.0.1:8001'), '/');
+
         if ($user) {
             $freeUsed = (int)$user->free_predictions_used;
             $balance  = (float)$user->token_balance;
             // Allow chat if still within free limit or has tokens
             if ($freeUsed >= self::FREE_LIMIT && $balance < 0.1) {
                 return response()->json([
-                    'status' => 'error', 
+                    'status' => 'error',
                     'message' => 'Lỗi: Tài khoản của bạn đã hết lượt. Vui lòng nạp thêm lượt.'
                 ], 402);
             }
@@ -115,7 +122,7 @@ class PredictionController extends Controller
                 ]
             ];
             $context = stream_context_create($opts);
-            $aiResponse = file_get_contents('http://127.0.0.1:8001/chat', false, $context);
+            $aiResponse = file_get_contents($pythonAiUrl . '/chat', false, $context);
             if ($aiResponse === false) {
                 throw new \Exception("Connection failed");
             }
@@ -126,7 +133,7 @@ class PredictionController extends Controller
             $answer = "Không thể kết nối đến AI Engine lúc này. Vui lòng thử lại sau.";
             $sources = [];
         }
-        
+
         // Deduct exactly 0.1 token per chat exactly as DOCS mentioned float subtraction
         // Deduct exactly 0.1 token per chat only if user is out of free trial
         if ($user && $user->free_predictions_used >= self::FREE_LIMIT) {
@@ -147,16 +154,17 @@ class PredictionController extends Controller
         ]);
     }
 
-    public function history(): JsonResponse {
-        $history = Prediction::where('user_id', auth()->id())->latest()->get()->map(function($item) {
-            return ['id'=>$item->id,'image_url'=>url('/api/img/'.$item->image),'prediction'=>$item->final_prediction,'country'=>$item->country,'era'=>$item->era,'data'=>$item->result_json,'created_at'=>$item->created_at];
+    public function history(): JsonResponse
+    {
+        $history = Prediction::where('user_id', auth()->id())->latest()->get()->map(function ($item) {
+            return ['id' => $item->id, 'image_url' => url('/api/img/' . $item->image), 'prediction' => $item->final_prediction, 'country' => $item->country, 'era' => $item->era, 'data' => $item->result_json, 'created_at' => $item->created_at];
         });
         return response()->json(['data' => $history]);
     }
 
-    public function show($id): JsonResponse {
+    public function show($id): JsonResponse
+    {
         $item = Prediction::findOrFail($id);
-        return response()->json(['status'=>'success','data'=>['id'=>$item->id,'image_url'=>url('/api/img/'.$item->image),'prediction'=>$item->final_prediction,'country'=>$item->country,'era'=>$item->era,'data'=>$item->result_json,'created_at'=>$item->created_at]]);
+        return response()->json(['status' => 'success', 'data' => ['id' => $item->id, 'image_url' => url('/api/img/' . $item->image), 'prediction' => $item->final_prediction, 'country' => $item->country, 'era' => $item->era, 'data' => $item->result_json, 'created_at' => $item->created_at]]);
     }
 }
-

@@ -13,7 +13,7 @@ class AIService
     public function __construct()
     {
         // Adjust endpoint as needed. Default is 8001 for Python AI Server
-        $this->pythonUrl = env('PYTHON_AI_URL', 'http://127.0.0.1:8001');
+        $this->pythonUrl = rtrim((string) env('PYTHON_AI_URL', 'http://127.0.0.1:8001'), '/');
     }
 
     /**
@@ -22,7 +22,7 @@ class AIService
     public function runMultiAgentDebate(UploadedFile $image): array
     {
         Log::info("AIService: sending image to Python server...");
-        
+
         try {
             $response = Http::timeout(120)->attach(
                 'file',
@@ -36,7 +36,7 @@ class AIService
                 if (is_array($body) && isset($body['detail'])) {
                     $errorMsg = $body['detail'];
                 }
-                
+
                 Log::error("AI Server response failed: " . $response->body());
                 return [
                     'error' => $errorMsg
@@ -44,7 +44,6 @@ class AIService
             }
 
             return $response->json();
-            
         } catch (\Exception $e) {
             Log::error("AIService Connection Error: " . $e->getMessage());
             return [
