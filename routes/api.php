@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\ContactController;
 
 use App\Http\Controllers\Api\CeramicLineController;
 use App\Http\Controllers\Api\AzureBlobStorageController;
+use App\Http\Controllers\Api\AdminController;
 
 // Public ceramic lines API
 Route::get('/ceramic-lines', [CeramicLineController::class, 'index']);
@@ -42,6 +43,21 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('/ai/chat', [PredictionController::class, 'chat']);
     Route::post('/profile/update', [AuthController::class, 'updateProfile']);
     Route::post('/profile/password', [AuthController::class, 'updatePassword']);
+
+    // Admin routes
+    Route::prefix('admin')->group(function () {
+        Route::get('/dashboard', [AdminController::class, 'dashboard']);
+        Route::get('/users', [AdminController::class, 'users']);
+        Route::put('/users/{id}', [AdminController::class, 'updateUser']);
+        Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+        Route::get('/ceramic-lines', [AdminController::class, 'ceramicLines']);
+        Route::post('/ceramic-lines', [AdminController::class, 'storeCeramicLine']);
+        Route::put('/ceramic-lines/{id}', [AdminController::class, 'updateCeramicLine']);
+        Route::delete('/ceramic-lines/{id}', [AdminController::class, 'deleteCeramicLine']);
+        Route::get('/payments', [AdminController::class, 'payments']);
+        Route::get('/predictions', [AdminController::class, 'predictions']);
+    });
+
     // Payment routes
     Route::get('/payment/status', [PaymentController::class, 'getStatus']);
     Route::get('/payment/packages', [PaymentController::class, 'getPackages']);
