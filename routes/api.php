@@ -7,6 +7,7 @@ use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\ContactController;
 
 use App\Http\Controllers\Api\CeramicLineController;
+use App\Http\Controllers\Api\AzureBlobStorageController;
 
 // Public ceramic lines API
 Route::get('/ceramic-lines', [CeramicLineController::class, 'index']);
@@ -48,6 +49,15 @@ Route::group(['middleware' => ['auth:sanctum']], function () {
     Route::post('/payment/create', [PaymentController::class, 'createPayment']);
     Route::get('/payment/check/{paymentId}', [PaymentController::class, 'checkStatus']);
     Route::post('/payment/test-complete/{paymentId}', [PaymentController::class, 'testCompletePayment']);
+});
+
+Route::prefix('v1/storage/azure-blob')->group(function () {
+    Route::post('/upload/single', [AzureBlobStorageController::class, 'uploadSingleFile']);
+    Route::post('/upload/multiple', [AzureBlobStorageController::class, 'uploadMultipleFiles']);
+    Route::delete('/delete/single', [AzureBlobStorageController::class, 'deleteSingleFile']);
+    Route::delete('/delete/multiple', [AzureBlobStorageController::class, 'deleteMultipleFiles']);
+    Route::put('/move/single', [AzureBlobStorageController::class, 'moveSingleFile']);
+    Route::put('/move/multiple', [AzureBlobStorageController::class, 'moveMultipleFiles']);
 });
 
 Route::get('/img/{path}', function (string $path) {
