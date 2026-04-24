@@ -7,12 +7,20 @@ use App\Models\User;
 use App\Models\Prediction;
 use App\Models\Payment;
 use App\Models\CeramicLine;
+use App\Services\AzureBlobStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
 
 class AdminController extends Controller
 {
+    private $azureStorage;
+    
+    public function __construct(AzureBlobStorageService $azureStorage)
+    {
+        $this->azureStorage = $azureStorage;
+    }
+    
     public function dashboard(): JsonResponse
     {
         $stats = [
@@ -82,9 +90,20 @@ class AdminController extends Controller
             'era' => 'nullable|string',
             'description' => 'nullable|string',
             'style' => 'nullable|string',
-            'is_featured' => 'boolean'
+            'is_featured' => 'boolean',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
         ]);
 
+        // Upload image to Azure if provided
+        if ($request->hasFile('image')) {
+            try {
+                $data['image_url'] = $this->azureStorage->uploadSingleFile($request->file('image'), 'ceramic-lines');
+            } catch (\Exception $e) {
+                return response()->json(['status' => 'error', 'message' => 'Lỗi upload image: ' . $e->getMessage()], 500);
+            }
+        }
+
+        unset($data['image']); // Remove file object from data
         $line = CeramicLine::create($data);
         return response()->json(['status' => 'success', 'data' => $line]);
     }
@@ -92,8 +111,30 @@ class AdminController extends Controller
     public function updateCeramicLine(Request $request, $id): JsonResponse
     {
         $line = CeramicLine::findOrFail($id);
-        $line->update($request->all());
-        return response()->json(['status' => 'success', 'data' => $line]);
+        
+        $data = $request->validate([
+            'name' => 'nullable|string',
+            'origin' => 'nullable|string',
+            'country' => 'nullable|string',
+            'era' => 'nullable|string',
+            'description' => 'nullable|string',
+            'style' => 'nullable|string',
+            'is_featured' => 'nullable|boolean',
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+        ]);
+        
+        // Upload new image to Azure if provided
+        if ($request->hasFile('image')) {
+            try {
+                $data['image_url'] = $this->azureStorage->uploadSingleFile($request->file('image'), 'ceramic-lines');
+            } catch (\Exception $e) {
+                return response()->json(['status' => 'error', 'message' => 'Lỗi upload image: ' . $e->getMessage()], 500);
+            }
+        }
+        
+        unset($data['image']); // Remove file object from data
+        $line->update($data);
+        return response()->json(['status' => 'success', 'data' => $line->fresh()]);
     }
 
     public function deleteCeramicLine($id): JsonResponse

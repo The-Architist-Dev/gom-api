@@ -4,12 +4,20 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\AzureBlobStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 
 class AuthController extends Controller
 {
+    private $azureStorage;
+    
+    public function __construct(AzureBlobStorageService $azureStorage)
+    {
+        $this->azureStorage = $azureStorage;
+    }
+    
     public function register(Request $request)
     {
         $fields = $request->validate([
@@ -132,8 +140,13 @@ class AuthController extends Controller
         ]);
 
         if ($request->hasFile('avatar')) {
-            $path = $request->file('avatar')->store('avatars', 'public');
-            $user->avatar = url('/api/img/' . $path);
+            try {
+                // Upload to Azure Blob Storage
+                $azureUrl = $this->azureStorage->uploadSingleFile($request->file('avatar'), 'avatars');
+                $user->avatar = $azureUrl;
+            } catch (\Exception $e) {
+                return response(['message' => 'Lỗi upload avatar: ' . $e->getMessage()], 500);
+            }
         }
 
         $user->name = $fields['name'];

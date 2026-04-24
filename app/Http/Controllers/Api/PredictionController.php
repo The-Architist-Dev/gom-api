@@ -7,6 +7,7 @@ use Illuminate\Http\Request;
 use App\Models\Prediction;
 use App\Models\TokenHistory;
 use App\Services\AIService;
+use App\Services\AzureBlobStorageService;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Http\JsonResponse;
 
@@ -15,9 +16,12 @@ class PredictionController extends Controller
     const FREE_LIMIT = 5;
     const TOKEN_COST = 1.0;
     private $aiService;
-    public function __construct(AIService $aiService)
+    private $azureStorage;
+    
+    public function __construct(AIService $aiService, AzureBlobStorageService $azureStorage)
     {
         $this->aiService = $aiService;
+        $this->azureStorage = $azureStorage;
     }
 
     public function predict(Request $request): JsonResponse
@@ -42,10 +46,20 @@ class PredictionController extends Controller
         }
 
         $image = $request->file('image');
-        $path  = $image->store('potteries', 'public');
+        
+        // Upload to Azure Blob Storage
+        try {
+            $azureUrl = $this->azureStorage->uploadSingleFile($image, 'predictions');
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Failed to upload image: ' . $e->getMessage()
+            ], 500);
+        }
+        
         $prediction = Prediction::create([
             'user_id'          => $user?->id ?? 2,
-            'image'            => $path,
+            'image'            => $azureUrl,  // Store full Azure URL
             'final_prediction' => 'Dang phan tich...',
             'country'          => 'Dang xu ly',
             'era'              => 'Dang xu ly',
@@ -157,7 +171,20 @@ class PredictionController extends Controller
     public function history(): JsonResponse
     {
         $history = Prediction::where('user_id', auth()->id())->latest()->get()->map(function ($item) {
-            return ['id' => $item->id, 'image_url' => url('/api/img/' . $item->image), 'prediction' => $item->final_prediction, 'country' => $item->country, 'era' => $item->era, 'data' => $item->result_json, 'created_at' => $item->created_at];
+            // Check if image is already a full URL (Azure) or local path
+            $imageUrl = filter_var($item->image, FILTER_VALIDATE_URL) 
+                ? $item->image 
+                : url('/api/img/' . $item->image);
+                
+            return [
+                'id' => $item->id, 
+                'image_url' => $imageUrl, 
+                'prediction' => $item->final_prediction, 
+                'country' => $item->country, 
+                'era' => $item->era, 
+                'data' => $item->result_json, 
+                'created_at' => $item->created_at
+            ];
         });
         return response()->json(['data' => $history]);
     }
@@ -165,6 +192,23 @@ class PredictionController extends Controller
     public function show($id): JsonResponse
     {
         $item = Prediction::findOrFail($id);
-        return response()->json(['status' => 'success', 'data' => ['id' => $item->id, 'image_url' => url('/api/img/' . $item->image), 'prediction' => $item->final_prediction, 'country' => $item->country, 'era' => $item->era, 'data' => $item->result_json, 'created_at' => $item->created_at]]);
+        
+        // Check if image is already a full URL (Azure) or local path
+        $imageUrl = filter_var($item->image, FILTER_VALIDATE_URL) 
+            ? $item->image 
+            : url('/api/img/' . $item->image);
+            
+        return response()->json([
+            'status' => 'success', 
+            'data' => [
+                'id' => $item->id, 
+                'image_url' => $imageUrl, 
+                'prediction' => $item->final_prediction, 
+                'country' => $item->country, 
+                'era' => $item->era, 
+                'data' => $item->result_json, 
+                'created_at' => $item->created_at
+            ]
+        ]);
     }
 }
