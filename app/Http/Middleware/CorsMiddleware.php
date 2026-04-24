@@ -15,6 +15,8 @@ class CorsMiddleware
      */
     public function handle(Request $request, Closure $next): Response
     {
+        $origin = $request->header('Origin');
+        
         // List of allowed origins
         $allowedOrigins = [
             'https://thearchivistai.vercel.app',
@@ -25,25 +27,30 @@ class CorsMiddleware
             'http://127.0.0.1:5173',
         ];
 
-        $origin = $request->header('Origin');
-        
         // For development, allow all localhost origins
-        if (app()->environment('local') && $origin && 
-            (str_starts_with($origin, 'http://localhost') || str_starts_with($origin, 'http://127.0.0.1'))) {
+        if ($origin && (str_starts_with($origin, 'http://localhost') || str_starts_with($origin, 'http://127.0.0.1'))) {
             $allowedOrigins[] = $origin;
         }
+        
+        // Allow all Vercel preview deployments
+        if ($origin && str_contains($origin, '.vercel.app')) {
+            $allowedOrigins[] = $origin;
+        }
+
+        // Check if origin is allowed
+        $isAllowed = $origin && in_array($origin, $allowedOrigins);
 
         // Handle preflight OPTIONS request
         if ($request->isMethod('OPTIONS')) {
             $response = response('', 200);
             
-            if ($origin && in_array($origin, $allowedOrigins)) {
+            if ($isAllowed) {
                 $response->headers->set('Access-Control-Allow-Origin', $origin);
+                $response->headers->set('Access-Control-Allow-Credentials', 'true');
             }
             
             $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
             $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
-            $response->headers->set('Access-Control-Allow-Credentials', 'true');
             $response->headers->set('Access-Control-Max-Age', '86400');
             
             return $response;
@@ -52,13 +59,13 @@ class CorsMiddleware
         // Handle actual request
         $response = $next($request);
 
-        if ($origin && in_array($origin, $allowedOrigins)) {
+        if ($isAllowed) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);
+            $response->headers->set('Access-Control-Allow-Credentials', 'true');
         }
         
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
         $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
-        $response->headers->set('Access-Control-Allow-Credentials', 'true');
 
         return $response;
     }
