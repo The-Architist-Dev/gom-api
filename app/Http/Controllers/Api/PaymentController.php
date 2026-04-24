@@ -32,7 +32,16 @@ class PaymentController extends Controller
     }
 
     public function getPackages() {
-        return response()->json(['packages' => self::PACKAGES]);
+        $packages = [];
+        foreach (self::PACKAGES as $id => $pkg) {
+            $packages[] = [
+                'id' => $id,
+                'name' => $pkg['name'],
+                'price' => $pkg['amount_vnd'],
+                'tokens' => $pkg['credit'],
+            ];
+        }
+        return response()->json(['packages' => $packages]);
     }
 
     public function getHistory(Request $request) {

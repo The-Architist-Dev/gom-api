@@ -26,17 +26,23 @@ class CorsMiddleware
         ];
 
         $origin = $request->header('Origin');
+        
+        // For development, allow all localhost origins
+        if (app()->environment('local') && $origin && 
+            (str_starts_with($origin, 'http://localhost') || str_starts_with($origin, 'http://127.0.0.1'))) {
+            $allowedOrigins[] = $origin;
+        }
 
         // Handle preflight OPTIONS request
         if ($request->isMethod('OPTIONS')) {
             $response = response('', 200);
             
-            if (in_array($origin, $allowedOrigins)) {
+            if ($origin && in_array($origin, $allowedOrigins)) {
                 $response->headers->set('Access-Control-Allow-Origin', $origin);
             }
             
             $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+            $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
             $response->headers->set('Access-Control-Max-Age', '86400');
             
@@ -46,12 +52,12 @@ class CorsMiddleware
         // Handle actual request
         $response = $next($request);
 
-        if (in_array($origin, $allowedOrigins)) {
+        if ($origin && in_array($origin, $allowedOrigins)) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);
         }
         
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
-        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin');
+        $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
         $response->headers->set('Access-Control-Allow-Credentials', 'true');
 
         return $response;
