@@ -64,7 +64,7 @@ jobs:
         uses: azure/webapps-deploy@v3
         id: deploy-to-webapp
         with:
-          app-name: 'TheArchivist'
+          app-name: 'thearchivist-edemdeeaf4ahamgs'
           slot-name: 'Production'
           package: .
           
