@@ -40,11 +40,13 @@ class CorsMiddleware
         // Check if origin is allowed
         $isAllowed = $origin && in_array($origin, $allowedOrigins);
 
-        // Handle preflight OPTIONS request
+        // Handle preflight OPTIONS request - MUST return 200 with headers
         if ($request->isMethod('OPTIONS')) {
             $response = response('', 200);
             
-            if ($isAllowed) {
+            // Always set CORS headers for OPTIONS, even if origin not in list
+            // This is important for Vercel deployments with dynamic subdomains
+            if ($isAllowed || ($origin && str_contains($origin, '.vercel.app'))) {
                 $response->headers->set('Access-Control-Allow-Origin', $origin);
                 $response->headers->set('Access-Control-Allow-Credentials', 'true');
             }
@@ -59,7 +61,7 @@ class CorsMiddleware
         // Handle actual request
         $response = $next($request);
 
-        if ($isAllowed) {
+        if ($isAllowed || ($origin && str_contains($origin, '.vercel.app'))) {
             $response->headers->set('Access-Control-Allow-Origin', $origin);
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
         }

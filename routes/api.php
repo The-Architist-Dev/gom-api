@@ -87,3 +87,11 @@ Route::get("/add_token", function() { \App\Models\User::query()->update(["token_
 Route::get('/test', function () {
     return response()->json(['status' => 'ok']);
 });
+
+Route::options('/test', function () {
+    return response('', 200);
+});
+
+Route::options('/login/social', function () {
+    return response('', 200);
+});
