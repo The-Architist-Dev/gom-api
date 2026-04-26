@@ -17,5 +17,8 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(\App\Http\Middleware\AddCOOPHeader::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        //
+        // Centralized API exception → JSON renderer
+        $exceptions->render(function (\Throwable $e, \Illuminate\Http\Request $request) {
+            return \App\Exceptions\ApiExceptionHandler::render($request, $e);
+        });
     })->create();
