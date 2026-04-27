@@ -7,6 +7,7 @@ use App\Models\User;
 use App\Models\Prediction;
 use App\Models\Payment;
 use App\Models\CeramicLine;
+use App\Models\TokenHistory;
 use App\Services\AzureBlobStorageService;
 use Illuminate\Http\Request;
 use Illuminate\Http\JsonResponse;
@@ -24,141 +25,466 @@ class AdminController extends Controller
     public function dashboard(): JsonResponse
     {
         $stats = [
-            'total_users' => User::count(),
-            'total_predictions' => Prediction::count(),
-            'total_revenue' => Payment::where('status', 'completed')->sum('amount_vnd'),
+            'total_users'           => User::count(),
+            'total_predictions'     => Prediction::count(),
+            'total_ceramics'        => CeramicLine::count(),
+            'total_ceramics_featured' => CeramicLine::where('is_featured', true)->count(),
+            'total_revenue'         => (int) Payment::where('status', 'completed')->sum('amount_vnd'),
+            'total_credits_sold'    => (int) Payment::where('status', 'completed')->sum('credit_amount'),
+            'payments_pending'      => Payment::where('status', 'pending')->count(),
+            'payments_failed'       => Payment::where('status', 'failed')->count(),
+            'payments_completed'    => Payment::where('status', 'completed')->count(),
         ];
 
-        $topUsers = User::withCount('predictions')
-            ->orderByDesc('predictions_count')
-            ->limit(10)
-            ->get();
+        $recentUsers = User::select(['id', 'name', 'email', 'avatar', 'role', 'token_balance', 'created_at'])
+            ->latest()->limit(5)->get();
+
+        $recentPredictions = Prediction::with('user:id,name,email')
+            ->select(['id', 'user_id', 'final_prediction', 'country', 'era', 'image', 'created_at'])
+            ->latest()->limit(5)->get()
+            ->map(function ($p) {
+                return [
+                    'id'              => $p->id,
+                    'predicted_label' => $p->final_prediction,
+                    'country'         => $p->country,
+                    'era'             => $p->era,
+                    'image_url'       => $p->image,
+                    'user'            => $p->user,
+                    'created_at'      => $p->created_at,
+                ];
+            });
+
+        $recentPayments = Payment::with('user:id,name,email')
+            ->select(['id', 'user_id', 'package_name', 'amount_vnd', 'credit_amount', 'status', 'hex_id', 'created_at'])
+            ->latest()->limit(5)->get()
+            ->map(function ($p) {
+                return [
+                    'id'            => $p->id,
+                    'hex_id'        => $p->hex_id,
+                    'package_name'  => $p->package_name,
+                    'amount'        => $p->amount_vnd,
+                    'credit_amount' => $p->credit_amount,
+                    'status'        => $p->status,
+                    'user'          => $p->user,
+                    'created_at'    => $p->created_at,
+                ];
+            });
 
         return response()->json([
-            'stats' => $stats,
-            'top_users' => $topUsers
+            'success' => true,
+            'data'    => [
+                'stats'              => $stats,
+                'recent_users'       => $recentUsers,
+                'recent_predictions' => $recentPredictions,
+                'recent_payments'    => $recentPayments,
+            ],
         ]);
     }
 
     public function users(Request $request): JsonResponse
     {
         $search = $request->query('search');
-        $query = User::query();
+        $query = User::select(['id', 'name', 'email', 'role', 'token_balance', 'free_predictions_used', 'avatar', 'phone', 'created_at']);
 
         if ($search) {
-            $query->where('name', 'like', "%{$search}%")
+            $query->where(function($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
                   ->orWhere('email', 'like', "%{$search}%");
+            });
         }
 
+        $users = $query->latest()->limit(1000)->get();
+        
+        // Add free_limit (hardcoded as 5 for now) and rename free_predictions_used to free_used for frontend
+        $users = $users->map(function($user) {
+            $user->free_used = $user->free_predictions_used;
+            $user->free_limit = 5;
+            unset($user->free_predictions_used);
+            return $user;
+        });
+
         return response()->json([
-            'status' => 'success',
-            'data' => $query->latest()->get()
+            'success' => true,
+            'data' => $users
+        ]);
+    }
+
+    public function showUser($id): JsonResponse
+    {
+        $user = User::select([
+            'id', 'name', 'email', 'role', 'token_balance', 'free_predictions_used',
+            'avatar', 'phone', 'email_verified_at', 'created_at', 'updated_at',
+        ])->findOrFail($id);
+
+        $recentPredictions = Prediction::where('user_id', $user->id)
+            ->select(['id', 'final_prediction', 'country', 'era', 'image', 'created_at'])
+            ->latest()->limit(10)->get()
+            ->map(function ($p) {
+                return [
+                    'id'              => $p->id,
+                    'predicted_label' => $p->final_prediction,
+                    'country'         => $p->country,
+                    'era'             => $p->era,
+                    'image_url'       => $p->image,
+                    'created_at'      => $p->created_at,
+                ];
+            });
+
+        $recentPayments = Payment::where('user_id', $user->id)
+            ->select(['id', 'package_name', 'amount_vnd', 'credit_amount', 'status', 'hex_id', 'created_at'])
+            ->latest()->limit(10)->get()
+            ->map(function ($p) {
+                return [
+                    'id'            => $p->id,
+                    'hex_id'        => $p->hex_id,
+                    'package_name'  => $p->package_name,
+                    'amount'        => $p->amount_vnd,
+                    'credit_amount' => $p->credit_amount,
+                    'status'        => $p->status,
+                    'created_at'    => $p->created_at,
+                ];
+            });
+
+        $recentTokenHistory = TokenHistory::where('user_id', $user->id)
+            ->select(['id', 'type', 'amount', 'description', 'created_at'])
+            ->latest()->limit(20)->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'user'                 => array_merge($user->toArray(), [
+                    'free_used'  => $user->free_predictions_used,
+                    'free_limit' => 5,
+                ]),
+                'recent_predictions'   => $recentPredictions,
+                'recent_payments'      => $recentPayments,
+                'recent_token_history' => $recentTokenHistory,
+            ],
         ]);
     }
 
     public function updateUser(Request $request, $id): JsonResponse
     {
         $user = User::findOrFail($id);
-        $user->update($request->only(['role', 'token_balance', 'free_predictions_used', 'name', 'email']));
-        return response()->json(['status' => 'success', 'data' => $user]);
+        
+        $validated = $request->validate([
+            'role' => 'sometimes|in:user,admin',
+            'token_balance' => 'sometimes|integer|min:0',
+            'free_limit' => 'sometimes|integer|min:0',
+            'name' => 'sometimes|string|max:255',
+            'avatar' => 'sometimes|string|nullable',
+            'phone' => 'sometimes|string|max:20|nullable',
+        ]);
+        
+        $user->update($validated);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'User updated successfully',
+            'data' => $user->fresh()
+        ]);
     }
 
     public function deleteUser($id): JsonResponse
     {
         $user = User::findOrFail($id);
+        
         if ($user->id === auth()->id()) {
-            return response()->json(['status' => 'error', 'message' => 'Cannot delete yourself'], 403);
+            return response()->json([
+                'success' => false,
+                'message' => 'Cannot delete yourself'
+            ], 403);
         }
+        
         $user->delete();
-        return response()->json(['status' => 'success', 'message' => 'User deleted']);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'User deleted successfully'
+        ]);
     }
 
-    public function ceramicLines(): JsonResponse
+    public function ceramicLines(Request $request): JsonResponse
     {
-        return response()->json([
-            'status' => 'success',
-            'data' => CeramicLine::orderByDesc('is_featured')->orderBy('name')->get()
+        $search   = $request->query('search');
+        $country  = $request->query('country');
+        $featured = $request->query('featured');
+
+        $query = CeramicLine::select([
+            'id', 'name', 'origin', 'country', 'era', 'description',
+            'image_url', 'style', 'is_featured', 'created_at',
         ]);
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('name', 'like', "%{$search}%")
+                  ->orWhere('country', 'like', "%{$search}%")
+                  ->orWhere('era', 'like', "%{$search}%")
+                  ->orWhere('origin', 'like', "%{$search}%");
+            });
+        }
+        if ($country) {
+            $query->where('country', $country);
+        }
+        if ($featured !== null && $featured !== '') {
+            $query->where('is_featured', filter_var($featured, FILTER_VALIDATE_BOOLEAN));
+        }
+
+        $lines = $query->orderByDesc('is_featured')->orderBy('name')->limit(500)->get();
+
+        return response()->json([
+            'success' => true,
+            'data'    => $lines,
+        ]);
+    }
+
+    public function showCeramicLine($id): JsonResponse
+    {
+        $line = CeramicLine::findOrFail($id);
+        return response()->json(['success' => true, 'data' => $line]);
     }
 
     public function storeCeramicLine(Request $request): JsonResponse
     {
         $data = $request->validate([
-            'name' => 'required|string',
-            'origin' => 'nullable|string',
-            'country' => 'nullable|string',
-            'era' => 'nullable|string',
+            'name' => 'required|string|max:255',
+            'origin' => 'nullable|string|max:255',
+            'country' => 'nullable|string|max:255',
+            'era' => 'nullable|string|max:255',
             'description' => 'nullable|string',
-            'style' => 'nullable|string',
-            'is_featured' => 'boolean',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'image_url' => 'nullable|string',
+            'is_featured' => 'nullable|boolean',
         ]);
 
-        // Upload image to Azure if provided
-        if ($request->hasFile('image')) {
-            try {
-                $data['image_url'] = $this->azureStorage->uploadSingleFile($request->file('image'), 'ceramic-lines');
-            } catch (\Exception $e) {
-                return response()->json(['status' => 'error', 'message' => 'Lỗi upload image: ' . $e->getMessage()], 500);
-            }
+        // Set default values
+        if (!isset($data['origin'])) {
+            $data['origin'] = $data['country'] ?? 'Unknown';
+        }
+        if (!isset($data['country'])) {
+            $data['country'] = $data['origin'] ?? 'Unknown';
         }
 
-        unset($data['image']); // Remove file object from data
         $line = CeramicLine::create($data);
-        return response()->json(['status' => 'success', 'data' => $line]);
+        
+        return response()->json([
+            'success' => true,
+            'message' => 'Ceramic line created successfully',
+            'data' => $line
+        ]);
     }
 
     public function updateCeramicLine(Request $request, $id): JsonResponse
     {
         $line = CeramicLine::findOrFail($id);
-        
+
         $data = $request->validate([
-            'name' => 'nullable|string',
-            'origin' => 'nullable|string',
-            'country' => 'nullable|string',
-            'era' => 'nullable|string',
-            'description' => 'nullable|string',
-            'style' => 'nullable|string',
-            'is_featured' => 'nullable|boolean',
-            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:5120',
+            'name'        => 'sometimes|string|max:255',
+            'origin'      => 'sometimes|nullable|string|max:255',
+            'country'     => 'sometimes|string|max:255',
+            'era'         => 'sometimes|nullable|string|max:255',
+            'style'       => 'sometimes|nullable|string|max:255',
+            'description' => 'sometimes|nullable|string',
+            'image_url'   => 'sometimes|nullable|string',
+            'is_featured' => 'sometimes|boolean',
         ]);
-        
-        // Upload new image to Azure if provided
-        if ($request->hasFile('image')) {
-            try {
-                $data['image_url'] = $this->azureStorage->uploadSingleFile($request->file('image'), 'ceramic-lines');
-            } catch (\Exception $e) {
-                return response()->json(['status' => 'error', 'message' => 'Lỗi upload image: ' . $e->getMessage()], 500);
-            }
-        }
-        
-        unset($data['image']); // Remove file object from data
+
         $line->update($data);
-        return response()->json(['status' => 'success', 'data' => $line->fresh()]);
+
+        return response()->json([
+            'success' => true,
+            'message' => 'Ceramic line updated successfully',
+            'data'    => $line->fresh(),
+        ]);
     }
 
     public function deleteCeramicLine($id): JsonResponse
     {
         $line = CeramicLine::findOrFail($id);
         $line->delete();
-        return response()->json(['status' => 'success', 'message' => 'Ceramic line deleted']);
-    }
-
-    public function payments(): JsonResponse
-    {
-        $payments = Payment::with('user')->latest()->get();
+        
         return response()->json([
-            'status' => 'success',
-            'data' => $payments
+            'success' => true,
+            'message' => 'Ceramic line deleted successfully'
         ]);
     }
 
-    public function predictions(): JsonResponse
+    public function payments(Request $request): JsonResponse
     {
-        $preds = Prediction::with('user')->latest()->limit(100)->get();
-        return response()->json([
-            'status' => 'success',
-            'data' => $preds
+        $search = $request->query('search');
+        $status = $request->query('status');
+
+        $query = Payment::select([
+            'id', 'user_id', 'amount_vnd', 'credit_amount', 'status',
+            'package_name', 'hex_id', 'sepay_tx_id', 'expired_at', 'created_at',
         ]);
+
+        if ($status) {
+            $query->where('status', $status);
+        }
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('hex_id', 'like', "%{$search}%")
+                  ->orWhere('package_name', 'like', "%{$search}%")
+                  ->orWhere('sepay_tx_id', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($q2) use ($search) {
+                      $q2->where('email', 'like', "%{$search}%")
+                         ->orWhere('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+
+        $payments = $query->latest()->limit(500)->get();
+
+        $userIds = $payments->pluck('user_id')->unique();
+        $users = User::whereIn('id', $userIds)->get(['id', 'name', 'email'])->keyBy('id');
+
+        $payments = $payments->map(function ($payment) use ($users) {
+            $payment->amount         = $payment->amount_vnd;
+            $payment->payment_method = 'bank_transfer';
+            $payment->user           = $users->get($payment->user_id);
+            unset($payment->amount_vnd);
+            return $payment;
+        });
+
+        return response()->json(['success' => true, 'data' => $payments]);
+    }
+
+    public function showPayment($id): JsonResponse
+    {
+        $payment = Payment::with('user:id,name,email,avatar')->findOrFail($id);
+        $payment->amount         = $payment->amount_vnd;
+        $payment->payment_method = 'bank_transfer';
+        return response()->json(['success' => true, 'data' => $payment]);
+    }
+
+    public function predictions(Request $request): JsonResponse
+    {
+        $search  = $request->query('search');
+        $country = $request->query('country');
+        $era     = $request->query('era');
+
+        $query = Prediction::with('user:id,name,email')
+            ->select(['id', 'user_id', 'final_prediction', 'country', 'era', 'image', 'result_json', 'created_at']);
+
+        if ($search) {
+            $query->where(function ($q) use ($search) {
+                $q->where('final_prediction', 'like', "%{$search}%")
+                  ->orWhereHas('user', function ($q2) use ($search) {
+                      $q2->where('email', 'like', "%{$search}%")
+                         ->orWhere('name', 'like', "%{$search}%");
+                  });
+            });
+        }
+        if ($country) {
+            $query->where('country', $country);
+        }
+        if ($era) {
+            $query->where('era', 'like', "%{$era}%");
+        }
+
+        $predictions = $query->latest()->limit(500)->get();
+
+        $predictions = $predictions->map(function ($prediction) {
+            $resultJson = $prediction->result_json ?? [];
+            $finalReport = is_array($resultJson) ? ($resultJson['final_report'] ?? []) : [];
+            $rawConfidence = $finalReport['confidence']
+                ?? $finalReport['final_confidence']
+                ?? null;
+
+            // Normalize: certainty often comes back as 0..100 string; confidence as 0..1
+            $confidence = null;
+            if (is_numeric($rawConfidence)) {
+                $val = (float) $rawConfidence;
+                $confidence = $val > 1 ? round($val / 100, 4) : round($val, 4);
+            } elseif (isset($finalReport['certainty']) && is_numeric($finalReport['certainty'])) {
+                $confidence = round(((float) $finalReport['certainty']) / 100, 4);
+            }
+
+            $prediction->predicted_label = $prediction->final_prediction;
+            $prediction->label           = $prediction->final_prediction;
+            $prediction->confidence      = $confidence;
+            $prediction->image_url       = $prediction->image;
+            $prediction->image_path      = null;
+            // Drop heavy result_json from list payload
+            unset($prediction->final_prediction, $prediction->result_json);
+            return $prediction;
+        });
+
+        return response()->json(['success' => true, 'data' => $predictions]);
+    }
+
+    public function showPrediction($id): JsonResponse
+    {
+        $prediction = Prediction::with('user:id,name,email,avatar')->findOrFail($id);
+        $resultJson = $prediction->result_json ?? [];
+        $finalReport = is_array($resultJson) ? ($resultJson['final_report'] ?? []) : [];
+        $rawConfidence = $finalReport['confidence']
+            ?? $finalReport['final_confidence']
+            ?? null;
+
+        $confidence = null;
+        if (is_numeric($rawConfidence)) {
+            $val = (float) $rawConfidence;
+            $confidence = $val > 1 ? round($val / 100, 4) : round($val, 4);
+        } elseif (isset($finalReport['certainty']) && is_numeric($finalReport['certainty'])) {
+            $confidence = round(((float) $finalReport['certainty']) / 100, 4);
+        }
+
+        return response()->json([
+            'success' => true,
+            'data'    => [
+                'id'              => $prediction->id,
+                'user_id'         => $prediction->user_id,
+                'user'            => $prediction->user,
+                'predicted_label' => $prediction->final_prediction,
+                'label'           => $prediction->final_prediction,
+                'country'         => $prediction->country,
+                'era'             => $prediction->era,
+                'confidence'      => $confidence,
+                'image_url'       => $prediction->image,
+                'result'          => $resultJson,
+                'final_report'    => $finalReport,
+                'created_at'      => $prediction->created_at,
+                'updated_at'      => $prediction->updated_at,
+            ],
+        ]);
+    }
+
+    public function tokenHistory(Request $request): JsonResponse
+    {
+        $userId = $request->query('user_id');
+        $type   = $request->query('type');
+        $from   = $request->query('from');
+        $to     = $request->query('to');
+
+        $query = TokenHistory::query()
+            ->select(['id', 'user_id', 'type', 'amount', 'description', 'created_at']);
+
+        if ($userId) {
+            $query->where('user_id', $userId);
+        }
+        if ($type && in_array($type, ['in', 'out'], true)) {
+            $query->where('type', $type);
+        }
+        if ($from) {
+            $query->where('created_at', '>=', $from);
+        }
+        if ($to) {
+            $query->where('created_at', '<=', $to . ' 23:59:59');
+        }
+
+        $rows = $query->latest()->limit(500)->get();
+
+        $userIds = $rows->pluck('user_id')->unique();
+        $users = User::whereIn('id', $userIds)
+            ->get(['id', 'name', 'email', 'avatar'])
+            ->keyBy('id');
+
+        $rows = $rows->map(function ($row) use ($users) {
+            $row->user = $users->get($row->user_id);
+            return $row;
+        });
+
+        return response()->json(['success' => true, 'data' => $rows]);
     }
 }

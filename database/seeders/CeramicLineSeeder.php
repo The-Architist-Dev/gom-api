@@ -20,38 +20,41 @@ class CeramicLineSeeder extends Seeder
          * fetchWikiImages() calls the Wikipedia REST API concurrently and returns
          * real Wikimedia CDN thumbnail URLs — guaranteed to exist.
          */
+        // Each entry is a primary article + optional fallback titles. The first one
+        // that returns a thumbnail wins. This guarantees real existing images for
+        // Meissen / Iznik / Goryeo where past hardcoded Wikimedia URLs went stale.
         $imgs = $this->fetchWikiImages([
-            'bat_trang'   => 'Bát_Tràng',
-            'bien_hoa'    => 'Vietnamese_pottery',
-            'phu_lang'    => 'Vietnamese_pottery',
-            'chu_dau'     => 'Blue_and_white_porcelain',
-            'thanh_ha'    => 'Terracotta',
-            'bau_truc'    => 'Champa',
-            'my_thien'    => 'Vietnamese_ceramics',
-            'jingdezhen'  => 'Jingdezhen_porcelain',
-            'yixing'      => 'Yixing_clay_teapot',
-            'longquan'    => 'Longquan_celadon',
-            'ru_ware'     => 'Ru_ware',
-            'dehua'       => 'Dehua_porcelain',
-            'raku'        => 'Raku_ware',
-            'arita'       => 'Arita_ware',
-            'bizen'       => 'Bizen_ware',
-            'hagi'        => 'Hagi_ware',
-            'shigaraki'   => 'Shigaraki_ware',
-            'goryeo'      => 'Goryeo_celadon',
-            'joseon'      => 'Joseon_white_porcelain',
-            'sawankhalok' => 'Sawankhalok_ware',
-            'bencharong'  => 'Bencharong',
-            'meissen'     => 'Meissen_porcelain',
-            'delft'       => 'Delftware',
-            'majolica'    => 'Majolica',
-            'limoges'     => 'Limoges_porcelain',
-            'wedgwood'    => 'Wedgwood',
-            'iznik'       => 'Iznik_pottery',
-            'persian'     => 'Persian_pottery',
-            'pueblo'      => 'Pueblo_pottery',
-            'talavera'    => 'Talavera_pottery',
-            'ndebele'     => 'Ndebele_people',
+            'bat_trang'   => ['Bát_Tràng'],
+            'bien_hoa'    => ['Vietnamese_pottery'],
+            'phu_lang'    => ['Vietnamese_pottery'],
+            'chu_dau'     => ['Chu_Đậu_ceramics', 'Blue_and_white_porcelain'],
+            'thanh_ha'    => ['Terracotta'],
+            'bau_truc'    => ['Champa', 'Vietnamese_pottery'],
+            'my_thien'    => ['Vietnamese_ceramics', 'Vietnamese_pottery'],
+            'jingdezhen'  => ['Jingdezhen_porcelain'],
+            'yixing'      => ['Yixing_clay_teapot'],
+            'longquan'    => ['Longquan_celadon'],
+            'ru_ware'     => ['Ru_ware'],
+            'dehua'       => ['Dehua_porcelain', 'Blanc_de_Chine'],
+            'raku'        => ['Raku_ware'],
+            'arita'       => ['Arita_ware', 'Imari_ware'],
+            'bizen'       => ['Bizen_ware'],
+            'hagi'        => ['Hagi_ware'],
+            'shigaraki'   => ['Shigaraki_ware'],
+            'goryeo'      => ['Korean_celadon', 'Goryeo_celadon', 'Goryeo'],
+            'joseon'      => ['Joseon_white_porcelain', 'Korean_pottery_and_porcelain'],
+            'sawankhalok' => ['Sawankhalok_ware', 'Si_Satchanalai_ware'],
+            'bencharong'  => ['Bencharong'],
+            'meissen'     => ['Meissen_porcelain', 'Meissen'],
+            'delft'       => ['Delftware'],
+            'majolica'    => ['Maiolica', 'Majolica'],
+            'limoges'     => ['Limoges_porcelain'],
+            'wedgwood'    => ['Wedgwood'],
+            'iznik'       => ['İznik_pottery', 'Iznik_pottery'],
+            'persian'     => ['Persian_pottery'],
+            'pueblo'      => ['Pueblo_pottery'],
+            'talavera'    => ['Talavera_pottery'],
+            'ndebele'     => ['Ndebele_people'],
         ]);
 
         $lines = [
@@ -400,39 +403,81 @@ class CeramicLineSeeder extends Seeder
     }
 
     /**
-     * Fetch Wikipedia thumbnail images concurrently using Http::pool().
-     * Returns a key => imageUrl map; falls back to a generic ceramic photo on any failure.
+     * Fetch Wikipedia thumbnail images.
+     *
+     * Accepts either string (single article title) or array (article + fallback titles)
+     * per key. The first article whose Wikipedia summary returns a thumbnail wins.
+     * Falls back to a generic ceramic photo on full failure.
      */
     private function fetchWikiImages(array $keyMap): array
     {
-        $keys   = array_keys($keyMap);
-        $titles = array_values($keyMap);
         $fallback = 'https://images.unsplash.com/photo-1578749556568-bc2c40e68b61?auto=format&fit=crop&q=80&w=800';
+        $result = [];
 
+        // Normalize: every value becomes an array of titles to try in order.
+        $tries = [];
+        foreach ($keyMap as $key => $value) {
+            $tries[$key] = is_array($value) ? array_values($value) : [(string) $value];
+        }
+
+        // Issue all FIRST-choice requests in parallel; collect misses.
+        $firstTitles = array_map(fn ($arr) => $arr[0], $tries);
+        $firstResp = $this->fetchSummariesPool(array_values($firstTitles));
+
+        $keys = array_keys($tries);
+        $misses = [];
+        foreach ($keys as $i => $key) {
+            $resp = $firstResp[$i] ?? null;
+            $src = $this->extractThumb($resp);
+            if ($src) {
+                $result[$key] = $src;
+            } else {
+                $misses[$key] = array_slice($tries[$key], 1); // fallback titles
+            }
+        }
+
+        // For each miss, try fallback titles sequentially (still bounded — at most 1-2 each).
+        foreach ($misses as $key => $fallbackTitles) {
+            $found = null;
+            foreach ($fallbackTitles as $title) {
+                $single = $this->fetchSummariesPool([$title]);
+                $src = $this->extractThumb($single[0] ?? null);
+                if ($src) {
+                    $found = $src;
+                    break;
+                }
+            }
+            $result[$key] = $found ?: $fallback;
+        }
+
+        return $result;
+    }
+
+    /** Pool a list of Wikipedia summary requests. */
+    private function fetchSummariesPool(array $titles): array
+    {
+        if (empty($titles)) return [];
         try {
-            $responses = Http::pool(function ($pool) use ($titles) {
+            return Http::pool(function ($pool) use ($titles) {
                 return array_map(
-                    fn ($t) => $pool->withoutVerifying()->timeout(6)
+                    fn ($t) => $pool->withoutVerifying()->timeout(8)
                         ->withHeaders(['User-Agent' => 'GomApp-Seeder/1.0 (ceramic-db-seed)'])
                         ->get('https://en.wikipedia.org/api/rest_v1/page/summary/' . urlencode($t)),
                     $titles
                 );
             });
         } catch (\Throwable $e) {
-            $responses = [];
+            return [];
         }
+    }
 
-        $result = [];
-        foreach ($keys as $i => $key) {
-            $resp = $responses[$i] ?? null;
-            if ($resp && !($resp instanceof \Throwable) && method_exists($resp, 'ok') && $resp->ok()) {
-                $src = $resp->json()['thumbnail']['source'] ?? null;
-                $result[$key] = $src ?: $fallback;
-            } else {
-                $result[$key] = $fallback;
-            }
+    /** Pull thumbnail.source from a Wikipedia summary response, returning null if missing. */
+    private function extractThumb($resp): ?string
+    {
+        if (!$resp || $resp instanceof \Throwable || !method_exists($resp, 'ok') || !$resp->ok()) {
+            return null;
         }
-
-        return $result;
+        $src = $resp->json()['thumbnail']['source'] ?? null;
+        return $src ?: null;
     }
 }

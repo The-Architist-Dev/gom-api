@@ -104,15 +104,25 @@ Route::middleware('auth:sanctum')->group(function () {
     // Admin
     Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
+
         Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/users/{id}', [AdminController::class, 'showUser']);
         Route::put('/users/{id}', [AdminController::class, 'updateUser']);
         Route::delete('/users/{id}', [AdminController::class, 'deleteUser']);
+
         Route::get('/ceramic-lines', [AdminController::class, 'ceramicLines']);
+        Route::get('/ceramic-lines/{id}', [AdminController::class, 'showCeramicLine']);
         Route::post('/ceramic-lines', [AdminController::class, 'storeCeramicLine']);
         Route::put('/ceramic-lines/{id}', [AdminController::class, 'updateCeramicLine']);
         Route::delete('/ceramic-lines/{id}', [AdminController::class, 'deleteCeramicLine']);
+
         Route::get('/payments', [AdminController::class, 'payments']);
+        Route::get('/payments/{id}', [AdminController::class, 'showPayment']);
+
         Route::get('/predictions', [AdminController::class, 'predictions']);
+        Route::get('/predictions/{id}', [AdminController::class, 'showPrediction']);
+
+        Route::get('/token-history', [AdminController::class, 'tokenHistory']);
     });
 });
 
