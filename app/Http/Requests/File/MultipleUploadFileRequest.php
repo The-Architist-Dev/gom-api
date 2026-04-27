@@ -19,7 +19,7 @@ class MultipleUploadFileRequest extends FormRequest
             'files.*' => ['required', 'file', 'max:5120'], // 5MB max each
         ];
     }
-    
+
     public function messages(): array
     {
         return [

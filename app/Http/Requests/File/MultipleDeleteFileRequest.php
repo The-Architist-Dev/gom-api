@@ -18,7 +18,7 @@ class MultipleDeleteFileRequest extends FormRequest
             'filePaths.*' => ['required', 'string'],
         ];
     }
-    
+
     public function messages(): array
     {
         return [

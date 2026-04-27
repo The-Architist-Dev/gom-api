@@ -8,15 +8,11 @@ use Symfony\Component\HttpFoundation\Response;
 
 class CorsMiddleware
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
+    // Handle CORS headers for allowed origins (localhost, Vercel deployments)
     public function handle(Request $request, Closure $next): Response
     {
         $origin = $request->header('Origin');
-        
+
         // List of allowed origins
         $allowedOrigins = [
             'https://thearchivistai.vercel.app',
@@ -31,7 +27,7 @@ class CorsMiddleware
         if ($origin && (str_starts_with($origin, 'http://localhost') || str_starts_with($origin, 'http://127.0.0.1'))) {
             $allowedOrigins[] = $origin;
         }
-        
+
         // Allow all Vercel preview deployments
         if ($origin && str_contains($origin, '.vercel.app')) {
             $allowedOrigins[] = $origin;
@@ -43,7 +39,7 @@ class CorsMiddleware
         // Handle preflight OPTIONS request - MUST return 200 with headers
         if ($request->isMethod('OPTIONS')) {
             $response = response('', 200);
-            
+
             // Always set CORS headers for OPTIONS, even if origin not in list
             // This is important for Vercel deployments with dynamic subdomains
             if ($isAllowed || ($origin && str_contains($origin, '.vercel.app'))) {
@@ -54,7 +50,7 @@ class CorsMiddleware
             $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
             $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
             $response->headers->set('Access-Control-Max-Age', '86400');
-            
+
             return $response;
         }
 
@@ -65,7 +61,7 @@ class CorsMiddleware
             $response->headers->set('Access-Control-Allow-Origin', $origin);
             $response->headers->set('Access-Control-Allow-Credentials', 'true');
         }
-        
+
         $response->headers->set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS, PATCH');
         $response->headers->set('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With, Accept, Origin, X-CSRF-Token');
 

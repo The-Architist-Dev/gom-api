@@ -23,12 +23,12 @@ class AzureBlobStorageService
     public function uploadSingleFile(UploadedFile $file, ?string $folderName = null): string
     {
         FileUtils::validateFile($file);
-        
+
         $resolvedFolderName = $this->resolveFolderName($folderName);
         $normalizedFileName = FileUtils::normalizeFileName($file->getClientOriginalName());
-        
+
         $path = $resolvedFolderName . '/' . $normalizedFileName;
-        
+
         try {
             $success = $this->disk->put($path, file_get_contents($file->getRealPath()), 'public');
             if (!$success) {
@@ -58,11 +58,11 @@ class AzureBlobStorageService
     public function deleteSingleFile(string $filePath): void
     {
         FileUtils::validateFilePath($filePath);
-        
+
         if (!$this->disk->exists($filePath)) {
             throw new Exception("File không tồn tại trên hệ thống.");
         }
-        
+
         $this->disk->delete($filePath);
     }
 
@@ -76,14 +76,14 @@ class AzureBlobStorageService
     public function moveSingleFile(string $sourceKey, string $destinationFolder): void
     {
         FileUtils::validateFilePath($sourceKey);
-        
+
         if (!$this->disk->exists($sourceKey)) {
             throw new Exception("File nguồn không tồn tại: " . $sourceKey);
         }
-        
+
         $fileName = basename($sourceKey);
         $destinationKey = rtrim($destinationFolder, '/') . '/' . $fileName;
-        
+
         $this->disk->move($sourceKey, $destinationKey);
     }
 

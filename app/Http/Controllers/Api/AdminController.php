@@ -16,12 +16,12 @@ use Illuminate\Support\Facades\DB;
 class AdminController extends Controller
 {
     private $azureStorage;
-    
+
     public function __construct(AzureBlobStorageService $azureStorage)
     {
         $this->azureStorage = $azureStorage;
     }
-    
+
     public function dashboard(): JsonResponse
     {
         $stats = [
@@ -94,7 +94,7 @@ class AdminController extends Controller
         }
 
         $users = $query->latest()->limit(1000)->get();
-        
+
         // Add free_limit (hardcoded as 5 for now) and rename free_predictions_used to free_used for frontend
         $users = $users->map(function($user) {
             $user->free_used = $user->free_predictions_used;
@@ -166,41 +166,41 @@ class AdminController extends Controller
     public function updateUser(Request $request, $id): JsonResponse
     {
         $user = User::findOrFail($id);
-        
+
         $validated = $request->validate([
-            'role' => 'sometimes|in:user,admin',
+            'role'          => 'sometimes|in:user,admin',
             'token_balance' => 'sometimes|integer|min:0',
-            'free_limit' => 'sometimes|integer|min:0',
-            'name' => 'sometimes|string|max:255',
-            'avatar' => 'sometimes|string|nullable',
-            'phone' => 'sometimes|string|max:20|nullable',
+            'free_limit'    => 'sometimes|integer|min:0',
+            'name'          => 'sometimes|string|max:255',
+            'avatar'        => 'sometimes|string|nullable',
+            'phone'         => 'sometimes|string|max:20|nullable',
         ]);
-        
+
         $user->update($validated);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'User updated successfully',
-            'data' => $user->fresh()
+            'data'    => $user->fresh(),
         ]);
     }
 
     public function deleteUser($id): JsonResponse
     {
         $user = User::findOrFail($id);
-        
+
         if ($user->id === auth()->id()) {
             return response()->json([
                 'success' => false,
-                'message' => 'Cannot delete yourself'
+                'message' => 'Cannot delete yourself',
             ], 403);
         }
-        
+
         $user->delete();
-        
+
         return response()->json([
             'success' => true,
-            'message' => 'User deleted successfully'
+            'message' => 'User deleted successfully',
         ]);
     }
 
@@ -265,11 +265,11 @@ class AdminController extends Controller
         }
 
         $line = CeramicLine::create($data);
-        
+
         return response()->json([
             'success' => true,
             'message' => 'Ceramic line created successfully',
-            'data' => $line
+            'data'    => $line,
         ]);
     }
 
@@ -301,10 +301,10 @@ class AdminController extends Controller
     {
         $line = CeramicLine::findOrFail($id);
         $line->delete();
-        
+
         return response()->json([
             'success' => true,
-            'message' => 'Ceramic line deleted successfully'
+            'message' => 'Ceramic line deleted successfully',
         ]);
     }
 

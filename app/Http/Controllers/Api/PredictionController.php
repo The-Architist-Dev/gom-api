@@ -188,9 +188,7 @@ class PredictionController extends Controller
         return $this->ok($this->formatPrediction($item, true), 'OK');
     }
 
-    /**
-     * Format prediction to a stable shape that includes certainty + confidence.
-     */
+    // Format prediction to a stable shape that includes certainty + confidence
     private function formatPrediction(Prediction $item, bool $detailed = false): array
     {
         $imageUrl = filter_var($item->image, FILTER_VALIDATE_URL)

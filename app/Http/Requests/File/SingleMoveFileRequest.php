@@ -18,7 +18,7 @@ class SingleMoveFileRequest extends FormRequest
             'destinationFolder' => ['required', 'string', 'max:255'],
         ];
     }
-    
+
     public function messages(): array
     {
         return [

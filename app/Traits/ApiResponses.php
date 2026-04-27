@@ -4,12 +4,7 @@ namespace App\Traits;
 
 use Illuminate\Http\JsonResponse;
 
-/**
- * Standardized API response helpers.
- *
- * Success: { success: true, message, data, meta? }
- * Error  : { success: false, message, code?, errors? }
- */
+// Standardized API response helpers: success { success, message, data, meta? } / error { success, message, code?, errors? }
 trait ApiResponses
 {
     protected function ok($data = null, string $message = 'OK', array $meta = [], int $status = 200): JsonResponse

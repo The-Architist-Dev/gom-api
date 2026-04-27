@@ -15,9 +15,7 @@ class AIService
         $this->pythonUrl = rtrim((string) env('PYTHON_AI_URL', 'http://127.0.0.1:8001'), '/');
     }
 
-    /**
-     * Call the Python FastAPI Multi-Agent Debate Server.
-     */
+    // Call the Python FastAPI Multi-Agent Debate Server
     public function runMultiAgentDebate(UploadedFile $image): array
     {
         $endpoint = "{$this->pythonUrl}/predict";

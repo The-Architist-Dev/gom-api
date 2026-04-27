@@ -37,7 +37,7 @@ class AzureBlobStorageController extends Controller
             $file = $request->file('file');
 
             $fileUrl = $this->azureBlobStorageService->uploadSingleFile($file, $folderName);
-            
+
             $responseDto = [
                 'originalFileName' => $file->getClientOriginalName(),
                 'fileUrl' => $fileUrl
@@ -62,7 +62,7 @@ class AzureBlobStorageController extends Controller
             $files = $request->file('files');
 
             $fileUrls = $this->azureBlobStorageService->uploadMultipleFiles($files, $folderName);
-            
+
             $fileResponses = [];
             foreach ($files as $index => $file) {
                 $fileResponses[] = [
@@ -92,9 +92,9 @@ class AzureBlobStorageController extends Controller
             if (empty($filePath)) {
                 return response()->json(['message' => 'filePath là bắt buộc'], 400);
             }
-            
+
             $this->azureBlobStorageService->deleteSingleFile($filePath);
-            
+
             return response()->json([
                 'message' => 'Xóa tệp thành công',
                 'meta' => $this->buildMetaInfo($request)
@@ -110,7 +110,7 @@ class AzureBlobStorageController extends Controller
     {
         try {
             $this->azureBlobStorageService->deleteMultipleFiles($request->input('filePaths'));
-            
+
             return response()->json([
                 'message' => 'Xóa nhiều tệp thành công',
                 'meta' => $this->buildMetaInfo($request)
@@ -127,7 +127,7 @@ class AzureBlobStorageController extends Controller
         try {
             $sourceKey = $request->input('sourceKey');
             $destinationFolder = $request->input('destinationFolder');
-            
+
             $this->azureBlobStorageService->moveSingleFile($sourceKey, $destinationFolder);
 
             return response()->json([

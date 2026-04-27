@@ -10,9 +10,8 @@ use Illuminate\Http\Request;
 class CeramicLineController extends Controller
 {
     use ApiResponses;
-    /**
-     * Lấy danh sách dòng gốm (có phân trang, lọc, tìm kiếm)
-     */
+
+    // Lấy danh sách dòng gốm (phân trang, lọc, tìm kiếm)
     public function index(Request $request)
     {
         $query = CeramicLine::query();
@@ -43,9 +42,7 @@ class CeramicLineController extends Controller
         return $this->ok($ceramics, 'OK', ['total' => $ceramics->count()]);
     }
 
-    /**
-     * Chi tiết một dòng gốm
-     */
+    // Chi tiết một dòng gốm
     public function show($id)
     {
         $ceramic = CeramicLine::findOrFail($id);

@@ -1,42 +1,49 @@
 # GOM API - Laravel Backend
 
-Backend API cho hệ thống giám định gốm sứ. Laravel 12 + Sanctum authentication.
+Backend API cho hệ thống giám định gốm sứ GOM. Laravel 12 + Sanctum token authentication + Aiven MySQL.
 
 ## Tính năng
 
-- Authentication (Email/Password, Google OAuth)
-- Phân tích gốm sứ (gọi Python AI service)
-- Quản lý token credits (5 lượt free, sau đó trả phí)
-- Thanh toán qua SePay
-- Chat với AI
-- Quản lý dòng gốm (Ceramic Lines)
-- Admin dashboard
-- Azure Blob Storage
+- **Authentication**: Email/Password, Google OAuth (One-Tap), forgot/reset password
+- **AI Predict**: Gọi Python AI service (`gom-ai`) để phân tích ảnh gốm sứ
+- **AI Chat**: Chat với AI chuyên gia gốm sứ
+- **Token System**: 5 lượt free, sau đó mua credits qua SePay
+- **Payment**: Tích hợp SePay QR payment gateway
+- **Ceramic Lines**: Quản lý catalog dòng gốm sứ (CRUD)
+- **Admin Dashboard**: Thống kê, quản lý users/ceramics/payments/predictions/token history
+- **Azure Blob Storage**: Upload/delete/move files
+- **Contact Form**: Gửi email qua SMTP
 
-## Tech stack
+## Tech Stack
 
-- Laravel 12
-- Sanctum (token auth)
-- SQLite (dev) / MySQL (prod)
-- Azure Blob Storage
-- SePay payment gateway
+- **Laravel 12** (PHP 8.2+)
+- **Sanctum** (Bearer token authentication)
+- **MySQL 8.0+** (Aiven cloud hoặc local)
+- **Azure Blob Storage** (lưu trữ file)
+- **SePay** (payment gateway)
+- **Gom AI** (Python FastAPI — gọi qua HTTP)
 
 ## Yêu cầu
 
 - PHP 8.2+
 - Composer 2.x
-- SQLite hoặc MySQL 8.0+
+- MySQL 8.0+ (hoặc SQLite cho dev nhanh)
 
 ## Cài đặt
 
 ```bash
-cd gom-api
 composer install
 cp .env.example .env
 php artisan key:generate
-touch database/database.sqlite
 php artisan migrate
 php artisan storage:link
+```
+
+Seed dữ liệu mẫu (tùy chọn):
+```bash
+php artisan db:seed                              # Chỉ seed users
+php artisan db:seed --class=CeramicLineSeeder    # Seed catalog gốm
+php artisan db:seed --class=PredictionSeeder      # Seed predictions (cần AI server)
 ```
 
 ## Cấu hình
@@ -49,7 +56,12 @@ APP_ENV=local
 APP_DEBUG=true
 APP_URL=http://localhost:8000
 
-DB_CONNECTION=sqlite
+DB_CONNECTION=mysql
+DB_HOST=your-host
+DB_PORT=3306
+DB_DATABASE=gom
+DB_USERNAME=your-user
+DB_PASSWORD=your-password
 
 FRONTEND_URL=http://localhost:3000
 SANCTUM_STATEFUL_DOMAINS=localhost:3000,127.0.0.1:3000
@@ -80,118 +92,123 @@ MAIL_PASSWORD=your-app-password
 php artisan serve --host=0.0.0.0 --port=8000
 ```
 
-Server chạy tại http://localhost:8000
+Server: http://localhost:8000
 
 ## API Endpoints
 
-### Public
+### Public (không cần auth)
 
 ```
-GET  /api/health
-POST /api/register
-POST /api/login
-POST /api/login/social
-POST /api/forgot-password
-POST /api/reset-password
-GET  /api/ceramic-lines
-GET  /api/ceramic-lines/{id}
-GET  /api/stats
-POST /api/contact
+GET   /api/health                     # Health check
+GET   /api/ceramic-lines              # Danh sách dòng gốm
+GET   /api/ceramic-lines/{id}         # Chi tiết dòng gốm
+GET   /api/stats                      # Thống kê công khai
+POST  /api/contact                    # Gửi form liên hệ
+POST  /api/register                   # Đăng ký tài khoản
+POST  /api/login                      # Đăng nhập
+POST  /api/login/social               # Đăng nhập Google OAuth
+POST  /api/forgot-password            # Quên mật khẩu
+POST  /api/reset-password             # Đặt lại mật khẩu
+GET   /api/img/{path}                 # Proxy đọc ảnh từ storage
 ```
 
 ### Authenticated (cần Bearer token)
 
 ```
-GET  /api/user
-POST /api/logout
-POST /api/profile/update
-POST /api/profile/password
+GET   /api/user                       # Thông tin user hiện tại
+POST  /api/logout                     # Đăng xuất
+POST  /api/profile/update             # Cập nhật profile
+POST  /api/profile/password           # Đổi mật khẩu
 
-POST /api/predict              # 1 token
-POST /api/ai/chat              # 0.1 token
-GET  /api/history
-GET  /api/history/{id}
+POST  /api/predict                    # Phân tích gốm sứ (1 token)
+POST  /api/ai/debate                  # Alias cho /predict
+POST  /api/ai/chat                    # Chat với AI (0.1 token)
+GET   /api/history                    # Lịch sử phân tích
+GET   /api/history/{id}               # Chi tiết một prediction
 
-GET  /api/payment/status
-GET  /api/payment/packages
-GET  /api/payment/history
-POST /api/payment/create
-GET  /api/payment/check/{id}
+GET   /api/payment/status             # Số dư token hiện tại
+GET   /api/payment/packages           # Danh sách gói nạp
+GET   /api/payment/history            # Lịch sử giao dịch
+POST  /api/payment/create             # Tạo thanh toán mới
+GET   /api/payment/check/{id}         # Kiểm tra trạng thái thanh toán
 
-POST /api/v1/storage/azure-blob/upload/single
-POST /api/v1/storage/azure-blob/upload/multiple
+POST  /api/v1/storage/azure-blob/upload/single
+POST  /api/v1/storage/azure-blob/upload/multiple
 DELETE /api/v1/storage/azure-blob/delete/single
+DELETE /api/v1/storage/azure-blob/delete/multiple
+PUT   /api/v1/storage/azure-blob/move/single
+PUT   /api/v1/storage/azure-blob/move/multiple
 ```
 
-### Admin
+### Admin (cần Bearer token + role admin)
 
 ```
-GET  /api/admin/dashboard
-GET  /api/admin/users
-PUT  /api/admin/users/{id}
-DELETE /api/admin/users/{id}
-GET  /api/admin/ceramic-lines
-POST /api/admin/ceramic-lines
-PUT  /api/admin/ceramic-lines/{id}
-DELETE /api/admin/ceramic-lines/{id}
-GET  /api/admin/payments
-GET  /api/admin/predictions
+GET    /api/admin/dashboard            # Thống kê tổng quan
+GET    /api/admin/users                # Danh sách users (search, filter)
+GET    /api/admin/users/{id}           # Chi tiết user
+PUT    /api/admin/users/{id}           # Cập nhật user (role, status)
+DELETE /api/admin/users/{id}           # Xóa user
+
+GET    /api/admin/ceramic-lines        # Danh sách dòng gốm (search, filter)
+GET    /api/admin/ceramic-lines/{id}   # Chi tiết dòng gốm
+POST   /api/admin/ceramic-lines        # Thêm dòng gốm
+PUT    /api/admin/ceramic-lines/{id}   # Cập nhật dòng gốm
+DELETE /api/admin/ceramic-lines/{id}   # Xóa dòng gốm
+
+GET    /api/admin/payments             # Danh sách thanh toán (filter)
+GET    /api/admin/payments/{id}        # Chi tiết thanh toán
+
+GET    /api/admin/predictions          # Danh sách predictions (filter)
+GET    /api/admin/predictions/{id}     # Chi tiết prediction + AI debate data
+
+GET    /api/admin/token-history        # Lịch sử token (filter by user, type, date)
+```
+
+### Dev-only (APP_ENV=local/testing)
+
+```
+POST  /api/payment/test-complete/{id}  # Test hoàn thành thanh toán
 ```
 
 ## Database
 
-Tables:
-- users (name, email, password, token_balance, free_predictions_used, avatar, phone)
-- predictions (user_id, image, final_prediction, country, era, result_json)
-- payments (user_id, package_id, amount_vnd, credit_amount, hex_id, status, sepay_tx_id)
-- token_history (user_id, type, amount, description)
-- ceramic_lines (name, origin, country, era, description, image_url, style, is_featured)
-- potteries (legacy)
-- personal_access_tokens (Sanctum)
+| Table | Mô tả |
+|---|---|
+| `users` | name, email, password, role, token_balance, free_predictions_used, avatar, phone |
+| `predictions` | user_id, image, final_prediction, country, era, result_json (full AI debate) |
+| `payments` | user_id, package_id, amount_vnd, credit_amount, hex_id, status, sepay_tx_id |
+| `token_history` | user_id, type (predict/chat/purchase/bonus), amount, description |
+| `ceramic_lines` | name, origin, country, era, description, image_url, style, is_featured |
+| `potteries` | Legacy table (giữ lại cho backward compat) |
+| `personal_access_tokens` | Sanctum token storage |
 
-Chi tiết: docs/database.md
+Chi tiết: `docs/database.md`
 
 ## Token System
 
-- Free: 5 lượt phân tích miễn phí
-- Predict: 1 token/lần
-- Chat: 0.1 token/lần
-- Mua token qua payment packages:
-  - Gói Basic: 50,000 VNĐ = 10 tokens
-  - Gói Pro: 100,000 VNĐ = 25 tokens
-  - Gói Premium: 200,000 VNĐ = 60 tokens
+| Hành động | Chi phí |
+|---|---|
+| Predict (phân tích ảnh) | 1 token |
+| Chat (hỏi AI) | 0.1 token |
+| Free cho user mới | 5 lượt predict |
 
-## Testing
+Gói nạp token qua SePay:
 
-```bash
-php artisan test
-
-# Test API
-curl -X POST http://localhost:8000/api/register \
-  -H "Content-Type: application/json" \
-  -d '{"name":"Test","email":"test@test.com","password":"password123","password_confirmation":"password123"}'
-
-curl -X POST http://localhost:8000/api/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"test@test.com","password":"password123"}'
-
-curl http://localhost:8000/api/user \
-  -H "Authorization: Bearer YOUR_TOKEN"
-```
+| Gói | Giá | Tokens |
+|---|---|---|
+| Basic | 50,000 VNĐ | 10 tokens |
+| Pro | 100,000 VNĐ | 25 tokens |
+| Premium | 200,000 VNĐ | 60 tokens |
 
 ## Troubleshooting
 
-Class not found:
-```bash
-composer dump-autoload
-```
-
-Permission denied:
-```bash
-chmod -R 775 storage bootstrap/cache
-```
-
-CORS error: Check FRONTEND_URL trong .env
+| Vấn đề | Giải pháp |
+|---|---|
+| Class not found | `composer dump-autoload` |
+| Permission denied | `chmod -R 775 storage bootstrap/cache` |
+| CORS error | Kiểm tra `FRONTEND_URL` trong `.env` |
+| 500 trên contact | Cấu hình SMTP trong `.env` |
+| Token không trừ | Kiểm tra `token_balance` trong DB |
 
 ## Deployment
 
@@ -203,11 +220,10 @@ php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan optimize
-
 php artisan migrate --force
 ```
 
-## Tài liệu khác
+## Tài liệu bổ sung
 
-- docs/database.md - Schema chi tiết
-- docs/api.md - API documentation đầy đủ
+- `docs/database.md` — Schema chi tiết
+- `docs/api.md` — API documentation đầy đủ

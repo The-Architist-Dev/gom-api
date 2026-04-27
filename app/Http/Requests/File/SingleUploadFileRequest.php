@@ -18,7 +18,7 @@ class SingleUploadFileRequest extends FormRequest
             'file' => ['required', 'file', 'max:5120'], // 5MB max
         ];
     }
-    
+
     public function messages(): array
     {
         return [

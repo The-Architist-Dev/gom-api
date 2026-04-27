@@ -29,10 +29,10 @@ class FileUtils
     {
         $extension = pathinfo($fileName, PATHINFO_EXTENSION);
         $name = pathinfo($fileName, PATHINFO_FILENAME);
-        
+
         // Remove special characters, Vietnamese accents and spaces
         $name = Str::slug($name);
-        
+
         // Return with extension if exists
         return $extension ? $name . '.' . strtolower($extension) : $name;
     }

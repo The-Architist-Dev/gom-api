@@ -10,11 +10,7 @@ use App\Http\Controllers\Api\CeramicLineController;
 use App\Http\Controllers\Api\AzureBlobStorageController;
 use App\Http\Controllers\Api\AdminController;
 
-/*
-|--------------------------------------------------------------------------
-| Public API
-|--------------------------------------------------------------------------
-*/
+// ── Public API ──
 
 // Health check
 Route::get('/health', fn () => response()->json(['success' => true, 'message' => 'OK', 'data' => ['status' => 'healthy']]));
@@ -59,11 +55,7 @@ Route::get('/img/{path}', function (string $path) {
     ]);
 })->where('path', '.*');
 
-/*
-|--------------------------------------------------------------------------
-| Authenticated API
-|--------------------------------------------------------------------------
-*/
+// ── Authenticated API ──
 
 Route::middleware('auth:sanctum')->group(function () {
     // Auth / profile
@@ -126,11 +118,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 });
 
-/*
-|--------------------------------------------------------------------------
-| Development-only routes (gated by APP_ENV)
-|--------------------------------------------------------------------------
-*/
+// ── Development-only routes (gated by APP_ENV) ──
 
 if (app()->environment('local', 'testing')) {
     Route::middleware('auth:sanctum')->group(function () {
@@ -138,10 +126,6 @@ if (app()->environment('local', 'testing')) {
     });
 }
 
-/*
-|--------------------------------------------------------------------------
-| CORS preflight
-|--------------------------------------------------------------------------
-*/
+// ── CORS preflight ──
 
 Route::options('/{any}', fn () => response('', 200))->where('any', '.*');

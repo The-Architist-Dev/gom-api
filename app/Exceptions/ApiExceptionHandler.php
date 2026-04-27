@@ -14,10 +14,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\HttpKernel\Exception\MethodNotAllowedHttpException;
 use Throwable;
 
-/**
- * Centralized API exception → JSON renderer.
- * Always returns the unified `{ success, message, code?, errors? }` shape.
- */
+// Centralized API exception → JSON renderer. Returns unified { success, message, code?, errors? } shape.
 class ApiExceptionHandler
 {
     public static function render(Request $request, Throwable $e): ?JsonResponse
