@@ -102,7 +102,7 @@ Route::middleware('auth:sanctum')->group(function () {
     });
 
     // Admin
-    Route::prefix('admin')->group(function () {
+    Route::prefix('admin')->middleware('admin')->group(function () {
         Route::get('/dashboard', [AdminController::class, 'dashboard']);
         Route::get('/users', [AdminController::class, 'users']);
         Route::put('/users/{id}', [AdminController::class, 'updateUser']);

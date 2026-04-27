@@ -11,7 +11,6 @@ use App\Http\Requests\Auth\SocialLoginRequest;
 use App\Http\Requests\Auth\UpdatePasswordRequest;
 use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Models\User;
-use App\Services\AzureBlobStorageService;
 use App\Traits\ApiResponses;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
@@ -25,8 +24,6 @@ use Illuminate\Support\Str;
 class AuthController extends Controller
 {
     use ApiResponses;
-
-    public function __construct(private AzureBlobStorageService $azureStorage) {}
 
     public function register(RegisterRequest $request)
     {
@@ -145,17 +142,9 @@ class AuthController extends Controller
         $user = $request->user();
         $fields = $request->validated();
 
-        if ($request->hasFile('avatar')) {
-            try {
-                $user->avatar = $this->azureStorage->uploadSingleFile($request->file('avatar'), 'avatars');
-            } catch (\Throwable $e) {
-                Log::error('Avatar upload failed', ['error' => $e->getMessage()]);
-                return $this->serverError('Lỗi upload avatar.');
-            }
-        }
-
-        if (array_key_exists('name', $fields))  $user->name  = $fields['name'];
-        if (array_key_exists('phone', $fields)) $user->phone = $fields['phone'];
+        if (array_key_exists('name', $fields))   $user->name   = $fields['name'];
+        if (array_key_exists('phone', $fields))  $user->phone  = $fields['phone'];
+        if (array_key_exists('avatar', $fields)) $user->avatar = $fields['avatar'];
 
         $user->save();
 
