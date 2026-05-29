@@ -194,20 +194,6 @@ if (app()->environment('local', 'testing')) {
     });
 }
 
-// ── Temporary deploy migration route (REMOVE after use) ──
-Route::get('/deploy/migrate', function (\Illuminate\Http\Request $request) {
-    if ($request->query('key') !== 'archivist-migrate-2026') {
-        return response()->json(['error' => 'Unauthorized'], 403);
-    }
-    try {
-        \Illuminate\Support\Facades\Artisan::call('migrate', ['--force' => true]);
-        $output = \Illuminate\Support\Facades\Artisan::output();
-        return response()->json(['success' => true, 'output' => $output]);
-    } catch (\Throwable $e) {
-        return response()->json(['success' => false, 'error' => $e->getMessage()], 500);
-    }
-});
-
 // ── CORS preflight ──
 
 Route::options('/{any}', fn () => response('', 200))->where('any', '.*');
