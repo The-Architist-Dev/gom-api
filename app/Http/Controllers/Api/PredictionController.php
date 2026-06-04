@@ -337,6 +337,7 @@ class PredictionController extends Controller
             'certainty'       => $certainty,
             'source_type'     => $item->source_type ?? 'debate',
             'lens_results'    => $item->lens_results,
+            'lens_status'     => $resultJson['lens_status'] ?? null,
             'created_at'      => $item->created_at,
         ];
 
